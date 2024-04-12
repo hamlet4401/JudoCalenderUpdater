@@ -4,6 +4,8 @@ import pandas as pd
 import re
 from datetime import datetime
 
+from googleCalendar import Google
+
 
 def read_excel_file(file_path):
     try:
@@ -105,6 +107,9 @@ def update_training_times_by_time(training_times, training_hours):
 
 
 def run(file_path, name):
+    google = Google()
+    google.authenticate()
+
     excel_dataframe = read_excel_file(file_path)
     training_times = extract_all_training_dates(excel_dataframe)
     total_trainings = len(training_times)
@@ -116,7 +121,13 @@ def run(file_path, name):
     update_training_times_by_time(training_times, training_hours)
     print(json.dumps(training_times,sort_keys=True, indent=4, default=str))
 
+    for training_day in training_times:
+        start_time = training_day["start"]
+        stop_time = training_day["stop"]
+        google.create_event(start_time, stop_time)
+
 
 if __name__ == "__main__":
     year = 2024
     run('Lestabel.xlsx', 'Hamlet')
+
