@@ -1,3 +1,5 @@
+import json
+
 import pandas as pd
 import re
 from datetime import datetime
@@ -69,24 +71,6 @@ def filter_training_dates(training_times, row_indices):
 
 
 def extract_training_hours(excel_dataframe, row_indices, training_times, total_trainings):
-    # if len(time_range) == 2:
-    #             training_times[i]["start"].replace(hour=time_range[0])
-    #             training_times[i]["stop"] = datetime(stop_time.year,
-    #                                                           stop_time.month,
-    #                                                           stop_time.day,
-    #                                                           time_range[1])
-    #         else:
-    #             training_times[i]["start"] = datetime(start_time.year,
-    #                                                            start_time.month,
-    #                                                            start_time.day,
-    #                                                            time_range[0],
-    #                                                            time_range[1])
-    #             training_times[i]["stop"] = datetime(stop_time.year,
-    #                                                           stop_time.month,
-    #                                                           stop_time.day,
-    #                                                           time_range[2],
-    #                                                           time_range[3])
-
     filtered_training_hours = []
     hour_index = find_header_index(excel_dataframe, "uren")
     for i in range(total_trainings):
@@ -97,15 +81,27 @@ def extract_training_hours(excel_dataframe, row_indices, training_times, total_t
 
 
 def update_training_times_by_time(training_times, training_hours):
-    for i in range(len(training_times)):
+    i = 0
+    while i < len(training_hours):
         time_range = re.findall(r'\d+', training_hours[i])
 
-        if len(time_range) == 2:
-            training_times[i]["start"] = training_times[i]["start"].replace(hour=int(time_range[0]))
-            training_times[i]["stop"] = training_times[i]["stop"].replace(hour=int(time_range[1]))
+        prev_training = training_times[i-1]["stop"]
+        if i > 0 and prev_training.day == training_times[i]["start"].day and prev_training.hour == int(time_range[0]):
+            if len(time_range) == 2:
+                training_times[i-1]["stop"] = training_times[i]["stop"].replace(hour=int(time_range[1]))
+            else:
+                training_times[i-1]["stop"] = training_times[i]["stop"].replace(hour=int(time_range[2]), minute=int(time_range[3]))
+            training_times.pop(i)
+            training_hours.pop(i)
+            i -= 1
         else:
-            training_times[i]["start"] = training_times[i]["start"].replace(hour=int(time_range[0]), minute=int(time_range[1]))
-            training_times[i]["stop"] = training_times[i]["stop"].replace(hour=int(time_range[2]), minute=int(time_range[3]))
+            if len(time_range) == 2:
+                training_times[i]["start"] = training_times[i]["start"].replace(hour=int(time_range[0]))
+                training_times[i]["stop"] = training_times[i]["stop"].replace(hour=int(time_range[1]))
+            else:
+                training_times[i]["start"] = training_times[i]["start"].replace(hour=int(time_range[0]), minute=int(time_range[1]))
+                training_times[i]["stop"] = training_times[i]["stop"].replace(hour=int(time_range[2]), minute=int(time_range[3]))
+        i += 1
 
 
 def run(file_path, name):
@@ -118,7 +114,7 @@ def run(file_path, name):
     training_times = filter_training_dates(training_times, row_indices)
     training_hours = extract_training_hours(excel_dataframe, row_indices, training_times, total_trainings)
     update_training_times_by_time(training_times, training_hours)
-    print(training_times)
+    print(json.dumps(training_times,sort_keys=True, indent=4, default=str))
 
 
 if __name__ == "__main__":
