@@ -1,4 +1,2 @@
-/credentials.json
-/token.json
-/.~lock.Lestabel.xlsx#
-/_pychache__
+/credentials
+__pycache__/

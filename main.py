@@ -6,6 +6,11 @@ from datetime import datetime
 
 from googleCalendar import Google
 
+import spondApi
+import asyncio
+import os
+import shutil
+
 
 def read_excel_file(file_path):
     try:
@@ -23,8 +28,9 @@ def extract_all_training_dates(excel_dataframe):
     date_index = find_header_index(excel_dataframe, "datum")
 
     date_mod = 0
-    for i in range(len(excel_dataframe.index)):
-        row_value = excel_dataframe.iloc[i, date_index]
+    date_iter = 0
+    while date_iter < len(excel_dataframe.index):
+        row_value = excel_dataframe.iloc[date_iter, date_index]
         if isinstance(row_value, str):
             match row_value.replace(' ', ''):
                 case "MA":
@@ -33,18 +39,19 @@ def extract_all_training_dates(excel_dataframe):
                     date_mod = 4
                 case "VRIJ":
                     date_mod = 3
+                case _:
+                    training_dates.append({})
+            date_iter += 1
         elif isinstance(row_value, datetime):
             for x in range(date_mod):
                 training_dates.append({"start": row_value, "stop": row_value})
+            date_iter += date_mod - 1
     return training_dates
 
 
 def find_header_index(excel_dataframe, name):
     if excel_dataframe is not None:
         columns_lower = [col.lower() for col in excel_dataframe.columns]
-        print("HEADER")
-        print(columns_lower)
-        print()
         name_lower = name.lower()
         if name_lower in columns_lower:
             return columns_lower.index(name_lower)
@@ -58,10 +65,6 @@ def training_indices(excel_dataframe, name, total_trainings):
         row_value = excel_dataframe.iloc[i, name_index]
         if isinstance(row_value, str) and row_value.lower() == name.lower():
             row_indices.append(i)
-            print(i)
-    print("ROW INDICES")
-    print(row_indices)
-    print()
     return row_indices
 
 
@@ -72,7 +75,7 @@ def filter_training_dates(training_times, row_indices):
     return filtered_training_times
 
 
-def extract_training_hours(excel_dataframe, row_indices, training_times, total_trainings):
+def extract_training_hours(excel_dataframe, row_indices, total_trainings):
     filtered_training_hours = []
     hour_index = find_header_index(excel_dataframe, "uren")
     for i in range(total_trainings):
@@ -87,12 +90,13 @@ def update_training_times_by_time(training_times, training_hours):
     while i < len(training_hours):
         time_range = re.findall(r'\d+', training_hours[i])
 
-        prev_training = training_times[i-1]["stop"]
+        prev_training = training_times[i - 1]["stop"]
         if i > 0 and prev_training.day == training_times[i]["start"].day and prev_training.hour == int(time_range[0]):
             if len(time_range) == 2:
-                training_times[i-1]["stop"] = training_times[i]["stop"].replace(hour=int(time_range[1]))
+                training_times[i - 1]["stop"] = training_times[i]["stop"].replace(hour=int(time_range[1]))
             else:
-                training_times[i-1]["stop"] = training_times[i]["stop"].replace(hour=int(time_range[2]), minute=int(time_range[3]))
+                training_times[i - 1]["stop"] = training_times[i]["stop"].replace(hour=int(time_range[2]),
+                                                                                  minute=int(time_range[3]))
             training_times.pop(i)
             training_hours.pop(i)
             i -= 1
@@ -101,33 +105,72 @@ def update_training_times_by_time(training_times, training_hours):
                 training_times[i]["start"] = training_times[i]["start"].replace(hour=int(time_range[0]))
                 training_times[i]["stop"] = training_times[i]["stop"].replace(hour=int(time_range[1]))
             else:
-                training_times[i]["start"] = training_times[i]["start"].replace(hour=int(time_range[0]), minute=int(time_range[1]))
-                training_times[i]["stop"] = training_times[i]["stop"].replace(hour=int(time_range[2]), minute=int(time_range[3]))
+                training_times[i]["start"] = training_times[i]["start"].replace(hour=int(time_range[0]),
+                                                                                minute=int(time_range[1]))
+                training_times[i]["stop"] = training_times[i]["stop"].replace(hour=int(time_range[2]),
+                                                                              minute=int(time_range[3]))
         i += 1
 
 
-def run(file_path, name):
+def create_tmp_folder():
+    """Create a tmp folder in the current directory if it doesn't exist."""
+    tmp_dir = "tmp"
+    if not os.path.exists(tmp_dir):
+        os.makedirs(tmp_dir)
+    return tmp_dir
+
+
+def delete_tmp_folder():
+    """Delete the tmp folder and all its contents."""
+    tmp_dir = "tmp"
+    if os.path.exists(tmp_dir):
+        shutil.rmtree(tmp_dir)
+
+
+def run(name):
     google = Google()
     google.authenticate()
 
-    excel_dataframe = read_excel_file(file_path)
-    training_times = extract_all_training_dates(excel_dataframe)
-    total_trainings = len(training_times)
+    tmp_dir = create_tmp_folder()
 
-    row_indices = training_indices(excel_dataframe, name, total_trainings)
+    try:
+        file_path = asyncio.run(
+            spondApi.get_latest_time_table(tmp_dir))
 
-    training_times = filter_training_dates(training_times, row_indices)
-    training_hours = extract_training_hours(excel_dataframe, row_indices, training_times, total_trainings)
-    update_training_times_by_time(training_times, training_hours)
-    print(json.dumps(training_times,sort_keys=True, indent=4, default=str))
+        # Process the Excel file
+        excel_dataframe = read_excel_file(file_path)
+        training_times = extract_all_training_dates(excel_dataframe)
+        print(f"ALL TRAINING DATES")
+        print(training_times)
+        print()
+        total_trainings = len(training_times)
 
-    for training_day in training_times:
-        start_time = training_day["start"]
-        stop_time = training_day["stop"]
-        google.create_event(start_time, stop_time)
+        # Get the relevant row indices for the person's training data
+        row_indices = training_indices(excel_dataframe, name, total_trainings)
+        print(f"ROW INDICES FOR {name}'s TRAINING")
+        print(row_indices)
+        print()
+
+        # Filter and extract the necessary training data
+        training_times = filter_training_dates(training_times, row_indices)
+        print(f"TRAINING DATES FOR {name}")
+        print(training_times)
+        print()
+        training_hours = extract_training_hours(excel_dataframe, row_indices, total_trainings)
+        update_training_times_by_time(training_times, training_hours)
+
+        # Print the result in a pretty JSON format
+        print(json.dumps(training_times, sort_keys=True, indent=4, default=str))
+
+        # Create calendar events in Google Calendar
+        for training_day in training_times:
+            start_time = training_day["start"]
+            stop_time = training_day["stop"]
+            google.create_event(start_time, stop_time)
+
+    finally:
+        delete_tmp_folder()
 
 
 if __name__ == "__main__":
-    year = 2024
-    run('Lestabel.xlsx', 'Hamlet')
-
+    run('Hamlet')

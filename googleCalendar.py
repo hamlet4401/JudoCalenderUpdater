@@ -5,37 +5,42 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-from googleapiclient.errors import HttpError
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = ["https://www.googleapis.com/auth/calendar"]
-
+TOKEN_PATH = "credentials/token.json"
+CREDENTIALS_PATH = "credentials/credentials.json"
 
 class Google:
     service = None
 
     def authenticate(self):
-        """Shows basic usage of the Google Calendar API.
-      Prints the start and name of the next 10 events on the user's calendar.
-      """
+        """Authenticates the user and provides credentials for the Google Calendar API."""
         creds = None
-        # The file token.json stores the user's access and refresh tokens, and is
-        # created automatically when the authorization flow completes for the first
-        # time.
-        if os.path.exists("token.json"):
-            creds = Credentials.from_authorized_user_file("token.json", SCOPES)
-        # If there are no (valid) credentials available, let the user log in.
+
+        # Check if the token file exists to load credentials
+        if os.path.exists(TOKEN_PATH):
+            creds = Credentials.from_authorized_user_file(TOKEN_PATH, SCOPES)
+
+        # If credentials are not valid or absent, refresh or re-authenticate
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
+                try:
+                    creds.refresh(Request())  # Try refreshing the access token
+                except:
+                    print("Token refresh failed. Performing full re-authentication.")
+                    creds = None  # Invalidate the credentials and force re-authentication
+            if not creds:  # If credentials are still not valid, re-authenticate
                 flow = InstalledAppFlow.from_client_secrets_file(
-                    "credentials.json", SCOPES
+                    CREDENTIALS_PATH, SCOPES
                 )
                 creds = flow.run_local_server(port=0)
-            # Save the credentials for the next run
-            with open("token.json", "w") as token:
+
+            # Save new credentials to the token file for future runs
+            with open(TOKEN_PATH, "w") as token:
                 token.write(creds.to_json())
+
+        # Build the Google Calendar API service with the valid credentials
         self.service = build("calendar", "v3", credentials=creds)
 
     def create_event(self, start_time, stop_time):
