@@ -86,6 +86,7 @@ def extract_training_hours(excel_dataframe, row_indices, total_trainings):
 
 
 def update_training_times_by_time(training_times, training_hours):
+    minute_zone = [0,15,30,45]
     i = 0
     while i < len(training_hours):
         time_range = re.findall(r'\d+', training_hours[i])
@@ -94,6 +95,10 @@ def update_training_times_by_time(training_times, training_hours):
         if i > 0 and prev_training.day == training_times[i]["start"].day and prev_training.hour == int(time_range[0]):
             if len(time_range) == 2:
                 training_times[i - 1]["stop"] = training_times[i]["stop"].replace(hour=int(time_range[1]))
+            elif len(time_range) == 3 and int(time_range[1]) not in minute_zone:
+                training_times[i - 1]["stop"] = training_times[i]["stop"].replace(hour=int(time_range[1]))
+            elif len(time_range) == 3 and int(time_range[1]) in minute_zone:
+                training_times[i - 1]["stop"] = training_times[i]["stop"].replace(hour=int(time_range[2]))
             else:
                 training_times[i - 1]["stop"] = training_times[i]["stop"].replace(hour=int(time_range[2]),
                                                                                   minute=int(time_range[3]))
@@ -104,6 +109,14 @@ def update_training_times_by_time(training_times, training_hours):
             if len(time_range) == 2:
                 training_times[i]["start"] = training_times[i]["start"].replace(hour=int(time_range[0]))
                 training_times[i]["stop"] = training_times[i]["stop"].replace(hour=int(time_range[1]))
+            elif len(time_range) == 3 and int(time_range[1]) in minute_zone:
+                training_times[i]["start"] = training_times[i]["start"].replace(hour=int(time_range[0]))
+                training_times[i]["start"] = training_times[i]["start"].replace(hour=int(time_range[1]))
+                training_times[i]["stop"] = training_times[i]["stop"].replace(hour=int(time_range[2]))
+            elif len(time_range) == 3 and int(time_range[1]) not in minute_zone:
+                training_times[i]["start"] = training_times[i]["start"].replace(hour=int(time_range[0]))
+                training_times[i]["stop"] = training_times[i]["stop"].replace(hour=int(time_range[1]))
+                training_times[i]["stop"] = training_times[i]["stop"].replace(hour=int(time_range[2]))
             else:
                 training_times[i]["start"] = training_times[i]["start"].replace(hour=int(time_range[0]),
                                                                                 minute=int(time_range[1]))
