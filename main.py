@@ -2,7 +2,7 @@ import json
 
 import pandas as pd
 import re
-from datetime import datetime
+from datetime import datetime, date
 
 from googleCalendar import Google
 
@@ -24,6 +24,8 @@ def read_excel_file(file_path):
 
 
 def extract_all_training_dates(excel_dataframe):
+    today = date.today()
+    year = today.year
     training_dates = []
     date_index = find_header_index(excel_dataframe, "datum")
 
@@ -44,7 +46,8 @@ def extract_all_training_dates(excel_dataframe):
             date_iter += 1
         elif isinstance(row_value, datetime):
             for x in range(date_mod):
-                training_dates.append({"start": row_value, "stop": row_value})
+                current_date = row_value.replace(year=year)
+                training_dates.append({"start": current_date, "stop": current_date})
             date_iter += date_mod - 1
     return training_dates
 
